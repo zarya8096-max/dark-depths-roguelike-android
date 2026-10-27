@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<title>Dark Depths: Roguelike</title>
+<style>
+  * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
+  body {
+    background-color: #0c0d12;
+    color: #c9d1d9;
+    font-family: 'Courier New', monospace, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  #header {
+    background: #161b22;
+    border-bottom: 2px solid #30363d;
+    padding: 6px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    font-weight: bold;
+  }
+  .stat-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #21262d;
+    border: 1px solid #30363d;
+  }
+  .hp-val { color: #f85149; }
+  .xp-val { color: #58a6ff; }
+  .lvl-val { color: #e3b341; }
+  .dng-val { color: #a371f7; }
+
+  #game-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #050608;
+    position: relative;
+    overflow: hidden;
+  }
+  canvas {
+    image-rendering: pixelated;
+    box-shadow: 0 0 20px rgba(0,0,0,0.8);
+    border-radius: 6px;
+  }
+
+  #log-box {
+    height: 48px;
+    background: #11141a;
+    border-top: 1px solid #21262d;
+    border-bottom: 1px solid #21262d;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: #8b949e;
+    overflow-y: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  .log-entry { line-height: 14px; }
+  .log-attack { color: #f85149; }
+  .log-kill { color: #58a6ff; font-weight: bold; }
+  .log-heal { color: #3fb950; }
+  .log-desc { color: #e3b341; }
+
+  #controls {
+    background: #161b22;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    height: 140px;
+  }
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 44px);
+    grid-template-rows: repeat(3, 44px);
+    gap: 4px;
+  }
+  .btn {
+    background: #21262d;
+    border: 1px solid #30363d;
+    color: #e6edf3;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    touch-action: manipulation;
+    active: background: #388bfd;
+  }
+  .btn:active { background: #1f6feb; border-color: #58a6ff; color: #fff; }
+  .btn-center { font-size: 11px; color: #8b949e; }
+
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .action-btn {
+    padding: 12px 20px;
+    background: #238636;
+    border: 1px solid #2ea043;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: bold;
+    text-align: center;
+    touch-action: manipulation;
+  }
+  .action-btn:active { background: #2ea043; }
+  .action-wait { background: #30363d; border-color: #484f58; color: #c9d1d9; }
+
+  #overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #f85149;
+    font-family: inherit;
+    z-index: 100;
+  }
+  #overlay h1 { font-size: 28px; margin-bottom: 12px; }
+  #overlay p { color: #8b949e; margin-bottom: 20px; font-size: 14px; }
+  #overlay button {
+    background: #238636;
+    border: none;
+    color: white;
+    padding: 10px 24px;
+    font-size: 15px;
+    font-weight: bold;
+    border-radius: 6px;
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <span class="stat-badge">HP: <span id="hp" class="hp-val">30/30</span></span>
+  <span class="stat-badge">LVL: <span id="lvl" class="lvl-val">1</span></span>
+  <span class="stat-badge">XP: <span id="xp" class="xp-val">0/20</span></span>
+  <span class="stat-badge">FLOOR: <span id="dng" class="dng-val">1</span></span>
+</div>
+
+<div id="game-container">
+  <canvas id="gameCanvas"></canvas>
+  <div id="overlay">
+    <h1 id="overlay-title">YOU DIED</h1>
+    <p id="overlay-msg">Slain in the dark ruins...</p>
+    <button onclick="restartGame()">DESCENT AGAIN</button>
+  </div>
+</div>
+
+<div id="log-box">
+  <div class="log-entry log-desc">Welcome to Dark Depths. Find the stairs (>) to descend.</div>
+  <div id="log-1" class="log-entry"></div>
+  <div id="log-0" class="log-entry"></div>
+</div>
+
+<div id="controls">
+  <div class="dpad">
+    <div></div>
+    <button class="btn" onclick="movePlayer(0, -1)">▲</button>
+    <div></div>
+    <button class="btn" onclick="movePlayer(-1, 0)">◀</button>
+    <button class="btn btn-center" onclick="waitTurn()">REST</button>
+    <button class="btn" onclick="movePlayer(1, 0)">▶</button>
+    <div></div>
+    <button class="btn" onclick="movePlayer(0, 1)">▼</button>
+    <div></div>
+  </div>
+
+  <div class="actions">
+    <button class="action-btn" onclick="descendStairs()">DESCEND (>)</button>
+    <button class="action-btn action-wait" onclick="drinkPotion()">POTION (<span id="pot-count">1</span>)</button>
+  </div>
+</div>
+
+<script>
+const MAP_W = 38;
+const MAP_H = 26;
+const TILE_SIZE = 16;
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = MAP_W * TILE_SIZE;
+canvas.height = MAP_H * TILE_SIZE;
+
+let floor = 1;
+let player = {
+  x: 0, y: 0,
+  hp: 30, maxHp: 30,
+  atk: 6, def: 2,
+  lvl: 1, xp: 0, nextXp: 20,
+  potions: 2
+};
+
+let map = [];
+let visible = [];
+let explored = [];
+let enemies = [];
+let items = [];
+let stairs = { x: 0, y: 0 };
+
+function addLog(text, type="") {
+  const l1 = document.getElementById('log-1');
+  const l0 = document.getElementById('log-0');
+  l1.innerHTML = l0.innerHTML;
+  l1.className = l0.className;
+  l0.innerHTML = text;
+  l0.className = "log-entry " + type;
+}
+
+function updateUI() {
+  document.getElementById('hp').innerText = `${player.hp}/${player.maxHp}`;
+  document.getElementById('lvl').innerText = player.lvl;
+  document.getElementById('xp').innerText = `${player.xp}/${player.nextXp}`;
+  document.getElementById('dng').innerText = floor;
+  document.getElementById('pot-count').innerText = player.potions;
+}
+
+function initMap() {
+  map = Array(MAP_H).fill(null).map(() => Array(MAP_W).fill(1)); // 1 = Wall, 0 = Floor
+  visible = Array(MAP_H).fill(null).map(() => Array(MAP_W).fill(false));
+  explored = Array(MAP_H).fill(null).map(() => Array(MAP_W).fill(false));
+  enemies = [];
+  items = [];
+
+  // BSP / Room generator
+  const rooms = [];
+  const minRoomSize = 4;
+  const maxRoomSize = 8;
+  const maxRooms = 8;
+
+  for (let r = 0; r < maxRooms; r++) {
+    const rw = Math.floor(Math.random() * (maxRoomSize - minRoomSize + 1)) + minRoomSize;
+    const rh = Math.floor(Math.random() * (maxRoomSize - minRoomSize + 1)) + minRoomSize;
+    const rx = Math.floor(Math.random() * (MAP_W - rw - 2)) + 1;
+    const ry = Math.floor(Math.random() * (MAP_H - rh - 2)) + 1;
+
+    let overlap = false;
+    for (const other of rooms) {
+      if (rx < other.x + other.w + 1 && rx + rw + 1 > other.x &&
+          ry < other.y + other.h + 1 && ry + rh + 1 > other.y) {
+        overlap = true;
+        break;
+      }
+    }
+    if (overlap) continue;
+
+    for (let y = ry; y < ry + rh; y++) {
+      for (let x = rx; x < rx + rw; x++) {
+        map[y][x] = 0;
+      }
+    }
+
+    if (rooms.length > 0) {
+      const prev = rooms[rooms.length - 1];
+      let cx = Math.floor(rx + rw / 2);
+      let cy = Math.floor(ry + rh / 2);
+      let px = Math.floor(prev.x + prev.w / 2);
+      let py = Math.floor(prev.y + prev.h / 2);
+
+      while (px !== cx) {
+        map[py][px] = 0;
+        px += (cx > px) ? 1 : -1;
+      }
+      while (py !== cy) {
+        map[py][px] = 0;
+        py += (cy > py) ? 1 : -1;
+      }
+    }
+
+    rooms.push({ x: rx, y: ry, w: rw, h: rh });
+  }
+
+  // Player position in first room
+  player.x = Math.floor(rooms[0].x + rooms[0].w / 2);
+  player.y = Math.floor(rooms[0].y + rooms[0].h / 2);
+
+  // Stairs in last room
+  const lastRoom = rooms[rooms.length - 1];
+  stairs.x = Math.floor(lastRoom.x + lastRoom.w / 2);
+  stairs.y = Math.floor(lastRoom.y + lastRoom.h / 2);
+
+  // Spawn monsters & items in other rooms
+  const enemyTypes = [
+    { name: "Bat", sym: "b", color: "#e3b341", hp: 8, atk: 4, def: 0, xp: 5 },
+    { name: "Ghoul", sym: "g", color: "#f85149", hp: 16, atk: 7, def: 2, xp: 12 },
+    { name: "Skeleton", sym: "s", color: "#c9d1d9", hp: 12, atk: 6, def: 1, xp: 8 },
+    { name: "Wraith", sym: "W", color: "#a371f7", hp: 22, atk: 9, def: 3, xp: 20 }
+  ];
+
+  for (let i = 1; i < rooms.length; i++) {
+    const rm = rooms[i];
+    // Enemy
+    const type = enemyTypes[Math.min(enemyTypes.length - 1, Math.floor(Math.random() * (floor + 1)))];
+    enemies.push({
+      x: rm.x + 1,
+      y: rm.y + 1,
+      name: type.name,
+      sym: type.sym,
+      color: type.color,
+      hp: type.hp + (floor - 1) * 3,
+      maxHp: type.hp + (floor - 1) * 3,
+      atk: type.atk + Math.floor(floor * 1.2),
+      def: type.def,
+      xp: type.xp + floor * 2
+    });
+
+    // Potion item chance
+    if (Math.random() < 0.5) {
+      items.push({
+        x: rm.x + rm.w - 2,
+        y: rm.y + rm.h - 2,
+        type: "potion",
+        sym: "!",
+        color: "#3fb950"
+      });
+    }
+  }
+
+  computeFOV();
+  updateUI();
+  render();
+}
+
+function computeFOV() {
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      visible[y][x] = false;
+    }
+  }
+
+  const radius = 6;
+  for (let a = 0; a < 360; a += 3) {
+    const rad = a * Math.PI / 180;
+    const dx = Math.cos(rad);
+    const dy = Math.sin(rad);
+    let ox = player.x + 0.5;
+    let oy = player.y + 0.5;
+
+    for (let d = 0; d < radius; d++) {
+      const ix = Math.floor(ox);
+      const iy = Math.floor(oy);
+      if (ix < 0 || ix >= MAP_W || iy < 0 || iy >= MAP_H) break;
+
+      visible[iy][ix] = true;
+      explored[iy][ix] = true;
+
+      if (map[iy][ix] === 1) break;
+      ox += dx;
+      oy += dy;
+    }
+  }
+}
+
+function render() {
+  ctx.fillStyle = "#050608";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.font = "14px 'Courier New', monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      const px = x * TILE_SIZE + TILE_SIZE / 2;
+      const py = y * TILE_SIZE + TILE_SIZE / 2;
+
+      if (!explored[y][x]) continue;
+
+      const isVis = visible[y][x];
+      if (map[y][x] === 1) {
+        ctx.fillStyle = isVis ? "#30363d" : "#161b22";
+        ctx.fillText("#", px, py);
+      } else {
+        ctx.fillStyle = isVis ? "#21262d" : "#0d1117";
+        ctx.fillText(".", px, py);
+      }
+    }
+  }
+
+  // Stairs
+  if (explored[stairs.y][stairs.x]) {
+    const px = stairs.x * TILE_SIZE + TILE_SIZE / 2;
+    const py = stairs.y * TILE_SIZE + TILE_SIZE / 2;
+    ctx.fillStyle = visible[stairs.y][stairs.x] ? "#58a6ff" : "#1f6feb";
+    ctx.font = "bold 15px monospace";
+    ctx.fillText(">", px, py);
+  }
+
+  // Items
+  for (const it of items) {
+    if (visible[it.y][it.x]) {
+      const px = it.x * TILE_SIZE + TILE_SIZE / 2;
+      const py = it.y * TILE_SIZE + TILE_SIZE / 2;
+      ctx.fillStyle = it.color;
+      ctx.font = "bold 14px monospace";
+      ctx.fillText(it.sym, px, py);
+    }
+  }
+
+  // Enemies
+  for (const en of enemies) {
+    if (visible[en.y][en.x]) {
+      const px = en.x * TILE_SIZE + TILE_SIZE / 2;
+      const py = en.y * TILE_SIZE + TILE_SIZE / 2;
+      ctx.fillStyle = en.color;
+      ctx.font = "bold 14px monospace";
+      ctx.fillText(en.sym, px, py);
+    }
+  }
+
+  // Player
+  const ppx = player.x * TILE_SIZE + TILE_SIZE / 2;
+  const ppy = player.y * TILE_SIZE + TILE_SIZE / 2;
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 16px monospace";
+  ctx.fillText("@", ppx, ppy);
+}
+
+function movePlayer(dx, dy) {
+  if (player.hp <= 0) return;
+
+  const nx = player.x + dx;
+  const ny = player.y + dy;
+
+  if (map[ny][nx] === 1) return; // Wall
+
+  // Enemy check (Attack)
+  const enemy = enemies.find(e => e.x === nx && e.y === ny);
+  if (enemy) {
+    attackEnemy(enemy);
+    enemyTurn();
+    computeFOV();
+    render();
+    updateUI();
+    return;
+  }
+
+  // Move
+  player.x = nx;
+  player.y = ny;
+
+  // Item pickup
+  const itemIdx = items.findIndex(it => it.x === nx && it.y === ny);
+  if (itemIdx >= 0) {
+    player.potions++;
+    addLog("Found a health potion!", "log-heal");
+    items.splice(itemIdx, 1);
+  }
+
+  enemyTurn();
+  computeFOV();
+  render();
+  updateUI();
+}
+
+function waitTurn() {
+  if (player.hp <= 0) return;
+  if (player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + 1);
+  addLog("You wait and regain 1 HP.");
+  enemyTurn();
+  computeFOV();
+  render();
+  updateUI();
+}
+
+function attackEnemy(enemy) {
+  const dmg = Math.max(1, player.atk - enemy.def + Math.floor(Math.random() * 3) - 1);
+  enemy.hp -= dmg;
+  addLog(`You strike ${enemy.name} for ${dmg} DMG.`, "log-attack");
+
+  if (enemy.hp <= 0) {
+    addLog(`Defeated ${enemy.name}! (+${enemy.xp} XP)`, "log-kill");
+    player.xp += enemy.xp;
+    enemies = enemies.filter(e => e !== enemy);
+
+    if (player.xp >= player.nextXp) {
+      player.lvl++;
+      player.xp -= player.nextXp;
+      player.nextXp = Math.floor(player.nextXp * 1.5);
+      player.maxHp += 6;
+      player.hp = player.maxHp;
+      player.atk += 2;
+      player.def += 1;
+      addLog(`LEVEL UP! You are now Level ${player.lvl}!`, "log-heal");
+    }
+  }
+}
+
+function enemyTurn() {
+  for (const en of enemies) {
+    const dist = Math.hypot(en.x - player.x, en.y - player.y);
+    if (dist <= 5) {
+      if (dist <= 1.5) {
+        // Attack player
+        const dmg = Math.max(1, en.atk - player.def + Math.floor(Math.random() * 2) - 1);
+        player.hp -= dmg;
+        addLog(`${en.name} hits you for ${dmg} DMG!`, "log-attack");
+
+        if (player.hp <= 0) {
+          player.hp = 0;
+          gameOver();
+          return;
+        }
+      } else {
+        // Step closer
+        const dx = Math.sign(player.x - en.x);
+        const dy = Math.sign(player.y - en.y);
+
+        let tx = en.x + dx;
+        let ty = en.y;
+        if (map[ty][tx] === 0 && !enemies.some(e => e.x === tx && e.y === ty) && !(player.x === tx && player.y === ty)) {
+          en.x = tx;
+        } else {
+          tx = en.x;
+          ty = en.y + dy;
+          if (map[ty][tx] === 0 && !enemies.some(e => e.x === tx && e.y === ty) && !(player.x === tx && player.y === ty)) {
+            en.y = ty;
+          }
+        }
+      }
+    }
+  }
+}
+
+function drinkPotion() {
+  if (player.hp <= 0) return;
+  if (player.potions <= 0) {
+    addLog("No potions left!");
+    return;
+  }
+  player.potions--;
+  const heal = 15;
+  player.hp = Math.min(player.maxHp, player.hp + heal);
+  addLog(`You drank a potion. Recovered ${heal} HP!`, "log-heal");
+  enemyTurn();
+  computeFOV();
+  render();
+  updateUI();
+}
+
+function descendStairs() {
+  if (player.x === stairs.x && player.y === stairs.y) {
+    floor++;
+    addLog(`You descend deeper into Floor ${floor}...`, "log-desc");
+    initMap();
+  } else {
+    addLog("You need to stand on the stairs (>) to descend.");
+  }
+}
+
+function gameOver() {
+  document.getElementById('overlay-title').innerText = "YOU DIED";
+  document.getElementById('overlay-msg').innerText = `You perished on Dungeon Floor ${floor} at Level ${player.lvl}.`;
+  document.getElementById('overlay').style.display = "flex";
+}
+
+function restartGame() {
+  floor = 1;
+  player = {
+    x: 0, y: 0,
+    hp: 30, maxHp: 30,
+    atk: 6, def: 2,
+    lvl: 1, xp: 0, nextXp: 20,
+    potions: 2
+  };
+  document.getElementById('overlay').style.display = "none";
+  initMap();
+}
+
+// Start
+initMap();
+</script>
+</body>
+</html>

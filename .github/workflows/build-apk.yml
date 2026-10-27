@@ -1,0 +1,61 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Generate Wrapper & Assemble Debug APK
+        run: |
+          gradle wrapper --gradle-version 8.9 --distribution-type bin
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --info
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p apk-output
+          cp app/build/outputs/apk/debug/*.apk apk-output/DarkDepthsRoguelike-debug.apk
+          cd apk-output
+          sha256sum DarkDepthsRoguelike-debug.apk > SHA256SUMS.txt
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DarkDepthsRoguelike-APK
+          path: apk-output/
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_TAG="v1.0.0-build-${{ github.run_number }}"
+          gh release create "$RELEASE_TAG" \
+            apk-output/DarkDepthsRoguelike-debug.apk \
+            apk-output/SHA256SUMS.txt \
+            --title "Dark Depths Roguelike v1.0.0 (Build ${{ github.run_number }})" \
+            --notes "Automated GitHub Actions Build for Android."
